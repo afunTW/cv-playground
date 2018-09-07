@@ -1,0 +1,14 @@
+cv2:
+  GaussianBlur:
+    ksize: !!python/tuple [5, 5]
+
+video:
+  ext:
+    - avi
+    - mp4
+
+image:
+  ext:
+    - jpg
+    - jpeg
+    - png
