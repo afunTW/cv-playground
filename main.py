@@ -6,7 +6,7 @@
 import argparse
 import logging
 from itertools import compress
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 
 import yaml
@@ -54,20 +54,21 @@ def _image_get_contour(img, config, option):
         return active_contour_by_threshold(img, **config['general']['filter'])
     return None
 
-def get_contour_from_video(video: Video, \
+def get_contour_from_video(videopath: str, \
                            frame_idx: int, \
                            config: dict, preprocess_option: str, contour_option: str):
     """basic process to get the contour from scratch"""
-    frame_img = video.read_frame(frame_idx)
-    if frame_img is None:
-        return None
+    with Video(videopath) as video:
+        frame_img = video.read_frame(frame_idx)
+        if frame_img is None:
+            return None
 
-    frame_img = _image_preprocess(frame_img, config, preprocess_option)
-    cnts = _image_get_contour(frame_img, config, contour_option) or None
-    if cnts is None:
-        return None
-    target = DetectionTarget(frame_idx, cnts)
-    return target
+        frame_img = _image_preprocess(frame_img, config, preprocess_option)
+        cnts = _image_get_contour(frame_img, config, contour_option) or None
+        if cnts is None:
+            return None
+        target = DetectionTarget(frame_idx, cnts)
+        return target
 
 def main(args: argparse.Namespace):
     """[summary]
@@ -89,9 +90,10 @@ def main(args: argparse.Namespace):
         # multiprocessing calc the contour
         pending_frame_idx = list(range(0, video.frame_count, config['general']['skip_per_nframe']))
         logger.info('process pending frame index: %d', len(pending_frame_idx))
-        with Pool() as pool:
+        logger.info('cpu count: %d (will used %d)', cpu_count, (cpu_count*3//4))
+        with Pool(processes=(cpu_count*3//4)) as pool:
             # basic contours
-            mp_args = zip([video]*len(pending_frame_idx), \
+            mp_args = zip([args.input]*len(pending_frame_idx), \
                            pending_frame_idx, \
                            [config]*len(pending_frame_idx), \
                            [args.preprocess]*len(pending_frame_idx), \
@@ -114,7 +116,7 @@ def main(args: argparse.Namespace):
                                      for i, j in pending_frame_idx if i.frame_idx+1 < j.frame_idx]
 
                 # multiprocessing calc
-                mp_args = zip([video]*len(pending_frame_idx), \
+                mp_args = zip([args.input]*len(pending_frame_idx), \
                               pending_frame_idx, \
                               [config]*len(pending_frame_idx), \
                               [args.preprocess]*len(pending_frame_idx), \
