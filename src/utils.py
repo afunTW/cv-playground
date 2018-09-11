@@ -1,3 +1,4 @@
+"""some utility function"""
 import logging
 import sys
 from datetime import datetime
@@ -8,7 +9,7 @@ LOGGER = logging.getLogger(__name__)
 
 def log_handler(*loggers, logname: str = ''):
     """[summary]
-    
+
     Keyword Arguments:
         logname {str} -- [description] (default: {''})
     """
@@ -18,23 +19,24 @@ def log_handler(*loggers, logname: str = ''):
         datefmt='%Y-%m-%d %H:%M:%S')
 
     # stream handler
-    sh = logging.StreamHandler(sys.stdout)
-    sh.setLevel(logging.INFO)
-    sh.setFormatter(formatter)
+    shell_handler = logging.StreamHandler(sys.stdout)
+    shell_handler.setLevel(logging.INFO)
+    shell_handler.setFormatter(formatter)
 
     # file handler
     if logname:
-        fh = logging.FileHandler(logname)
-        fh.setLevel(logging.DEBUG)
-        fh.setFormatter(formatter)
+        file_handler = logging.FileHandler(logname)
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
 
     for logger in loggers:
         if logname:
-            logger.addHandler(fh)
-        logger.addHandler(sh)
+            logger.addHandler(file_handler)
+        logger.addHandler(shell_handler)
         logger.setLevel(logging.DEBUG)
 
 def func_profile(func):
+    """record the function processing time"""
     @wraps(func)
     def wrapped(*args, **kwargs):
         start_time = datetime.now()
