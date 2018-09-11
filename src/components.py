@@ -265,5 +265,5 @@ class DetectionTarget():
             target {DetectionTarget} -- target object
             bound {float} -- tolerable_shifting_dist
         """
-        l2_dist = np.linalg.norm(np.array(self.center), np.array(target.center))
+        l2_dist = np.linalg.norm(np.array(self.center) - np.array(target.center))
         return l2_dist > bound
