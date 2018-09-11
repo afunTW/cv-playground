@@ -5,15 +5,17 @@
 """
 import argparse
 import logging
+from itertools import compress
+from multiprocessing import Pool
 from pathlib import Path
 
 import yaml
 
-from src.components import Frame, FramePanel, Video
+from src.components import DetectionTarget, Video
 from src.methods.retinex import automated_msrcr
-from src.methods.retinex import multi_scale_retinex_color_restoration as MSRCR
 from src.methods.retinex import multi_scale_retinex_chromaticity_preservation as MSRCP
-from src.methods.threshold import find_contour_by_threshold, active_contour_by_threshold
+from src.methods.retinex import multi_scale_retinex_color_restoration as MSRCR
+from src.methods.threshold import active_contour_by_threshold, find_contour_by_threshold
 from src.utils import log_handler
 
 CONFIG_FILE = str(Path(__file__).resolve().parents[0] / 'config.yaml')
@@ -33,7 +35,39 @@ def argparser():
     parser.add_argument('-p', '--preprocess', dest='preprocess', \
                         choices=['MSRCR', 'autoMSRCR', 'MSRCP'], \
                         help='image preprocessing')
+    parser.add_argument('-s', '--savepath', dest='savepath', help='video save path')
     return parser
+
+def _image_preprocess(img, config, option):
+    if option == 'MSRCR':
+        img = MSRCR(img, **config['retinex']['MSRCR'])
+    elif option == 'autoMSRCR':
+        img = automated_msrcr(img, **config['retinex']['auto_MSRCR'])
+    elif option == 'MSRCP':
+        img = MSRCP(img, **config['retinex']['MSRCP'])
+    return img
+
+def _image_get_contour(img, config, option):
+    if option == 'threshold':
+        return find_contour_by_threshold(img, **config['cv2'], **config['general']['filter'])
+    elif option == 'active_contour':
+        return active_contour_by_threshold(img, **config['general']['filter'])
+    return None
+
+def get_contour_from_video(video: Video, \
+                           frame_idx: int, \
+                           config: dict, preprocess_option: str, contour_option: str):
+    """basic process to get the contour from scratch"""
+    frame_img = video.read_frame(frame_idx)
+    if frame_img is None:
+        return None
+
+    frame_img = _image_preprocess(frame_img, config, preprocess_option)
+    cnts = _image_get_contour(frame_img, config, contour_option) or None
+    if cnts is None:
+        return None
+    target = DetectionTarget(frame_idx, cnts)
+    return target
 
 def main(args: argparse.Namespace):
     """[summary]
@@ -44,31 +78,56 @@ def main(args: argparse.Namespace):
     """
     # config
     logger = logging.getLogger(__name__)
-    log_handler(logger)
+    log_handler(logger, logging.getLogger(Video.__class__.__name__))
     logger.info(args)
     with open(CONFIG_FILE) as config_file:
         config = yaml.load(config_file)
 
     # test single frame from video and the conventional find contour method
     with Video(args.input) as video:
-        frame_img = video.read_frame(0)
-        if args.preprocess == 'MSRCR':
-            frame_img = MSRCR(frame_img, **config['retinex']['MSRCR'])
-        elif args.preprocess == 'autoMSRCR':
-            frame_img = automated_msrcr(frame_img, **config['retinex']['auto_MSRCR'])
-        elif args.preprocess == 'MSRCP':
-            frame_img = MSRCP(frame_img, **config['retinex']['MSRCP'])
-        frame = Frame()
-        frame.load(frame_img)
 
-        if args.option == 'threshold':
-            cnts = find_contour_by_threshold(frame.src, **config['cv2'], **config['general']['filter'])
-        elif args.option == 'active_contour':
-            cnts = active_contour_by_threshold(frame.src, **config['general']['filter'])
+        # multiprocessing calc the contour
+        pending_frame_idx = list(range(0, video.frame_count, config['skip_per_nframe']))
+        logger.info('process pending frame index: %d', len(pending_frame_idx))
+        with Pool() as pool:
+            # basic contours
+            mp_args = zip([video]*len(pending_frame_idx), \
+                           pending_frame_idx, \
+                           [config]*len(pending_frame_idx), \
+                           [args.preprocess]*len(pending_frame_idx), \
+                           [args.option]*len(pending_frame_idx))
+            mp_targets = pool.starmap_async(get_contour_from_video, mp_args)
+            mp_targets = mp_targets.get()
+            mp_targets = [i for i in mp_targets if i]
+            mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
+            _basic_target_counts = len(mp_targets)
 
-        with FramePanel(frame) as panel:
-            panel.draw_contours(cnts)
-            panel.show()
+            # interpolate contours
+            while True:
+                # find the new pending index
+                pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
+                check_frame_idx = [i.is_shifting(j) for i, j in pair_targets]
+                if not any(check_frame_idx):
+                    break
+                pending_frame_idx = list(compress(pair_targets, check_frame_idx))
+                pending_frame_idx = [(i.frame_idx+j.frame_idx)//2 \
+                                     for i, j in pending_frame_idx if i.frame_idx+1 < j.frame_idx]
+
+                # multiprocessing calc
+                mp_args = zip([video]*len(pending_frame_idx), \
+                              pending_frame_idx, \
+                              [config]*len(pending_frame_idx), \
+                              [args.preprocess]*len(pending_frame_idx), \
+                              [args.option]*len(pending_frame_idx))
+                mp_interpolate_targets = pool.starmap_async(get_contour_from_video, mp_args)
+                mp_interpolate_targets = mp_interpolate_targets.get()
+                mp_targets += [i for i in mp_interpolate_targets if i]
+                mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
+
+            logger.info('#contours after interpolate: %d -> %d', \
+                        _basic_target_counts, len(mp_targets))
+            video.detect_targets += mp_targets
+        video.save(args.savepath, draw_cnts=True)
 
 if __name__ == '__main__':
     main(argparser().parse_args())

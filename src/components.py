@@ -3,9 +3,13 @@ Define the component in this project
 """
 import abc
 import logging
+from pathlib import Path
+from subprocess import call
 
 import cv2
 import numpy as np
+
+from tqdm import tqdm
 
 
 class InternalInputObject(abc.ABC):
@@ -109,7 +113,8 @@ class FramePanel(InternalPanelObject):
             cnts {np.ndarray} -- contours
         """
         for cnt_idx, cnt in enumerate(cnts):
-            if cnt_idx == 0: continue
+            if cnt_idx == 0:
+                continue
             pt1, pt2 = tuple(cnts[cnt_idx-1][0]), tuple(cnt[0])
             cv2.line(self.frame.src, pt1, pt2, self.cnt_color, 2, cv2.LINE_AA)
 
@@ -127,6 +132,7 @@ class Video(InternalInputObject):
         super().__init__(src_path=src_path)
         self.cap = None
         self.frame_idx = 0
+        self.detect_targets = []
 
     @property
     def frame_count(self):
@@ -158,6 +164,48 @@ class Video(InternalInputObject):
         else:
             self.cap = cv2.VideoCapture(self.src_path)
 
+    def save(self, savepath: str, draw_cnts: bool = True):
+        """save the video to given path
+
+        Arguments:
+            savepath {str} -- save path
+
+        Keyword Arguments:
+            draw_cnts {bool} -- whether to draw contour (default: {True})
+        """
+
+        savepath = Path(savepath)
+        if not savepath.parent.exists():
+            savepath.parent.mkdir(parents=True)
+
+        if draw_cnts and self.detect_targets:
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            resolution = tuple(map(int, (self.frame_width, self.frame_height)))
+            video_writer = cv2.VideoWriter(str(savepath), fourcc, self.fps, resolution)
+            self.detect_targets = sorted(self.detect_targets, lambda x: x.frame_idx)
+            target_idx = 0
+
+            for frame_idx in tqdm(range(self.frame_count)):
+                frame = self.read_frame(frame_idx)
+
+                # choose the target object
+                target = self.detect_targets[target_idx]
+                if target.frame_idx < frame_idx:
+                    target_idx = min(target_idx+1, len(self.detect_targets)-1)
+                    target = self.detect_targets[target_idx]
+                for idx, cnt in enumerate(target.cnts):
+                    if idx == 0:
+                        continue
+                    pt1, pt2 = tuple(target.cnts[idx-1][0]), tuple(cnt[0])
+                    cv2.line(frame, pt1, pt2, (0, 255, 0), 2, cv2.LINE_AA)
+                cv2.putText(frame, 'frame ({}/{})'.format(frame_idx+1, self.frame_count), \
+                            (10, 10), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
+                video_writer.write(frame)
+            video_writer.release()
+        else:
+            self.logger.info('No any modification, copy from source')
+            call(['rsync', '-av', self.src_path, savepath])
+
     def read_frame(self, frame_idx):
         """read frame and check if read success"""
         assert frame_idx < self.frame_count, 'frame idx should be less than %d' % self.frame_count
@@ -168,3 +216,54 @@ class Video(InternalInputObject):
             return frame
         self.logger.exception('read #%s frame failed', str(self.frame_idx))
         return None
+
+class DetectionTarget():
+    """detection target to save the contour and related property as data class"""
+    def __init__(self, frame_idx: int, cnts: np.ndarray):
+        """
+        Arguments:
+            frame_idx {int} -- frame index
+            cnts {np.ndarray} -- contour
+        """
+        self.logger = logging.getLogger(self.__class__.__name__)
+        self._frame_idx = frame_idx
+        self._cnts = cnts
+        self._rect = None
+        self._center = None
+
+    @property
+    def frame_idx(self):
+        """return private frame index"""
+        return self._frame_idx
+
+    @property
+    def cnts(self):
+        """return private contours"""
+        return self._cnts
+
+    @property
+    def rect(self):
+        """return the rect coordinate generated from contours"""
+        if not self._rect:
+            self._rect = cv2.boundingRect(self._cnts)
+        return self._rect
+
+    @property
+    def center(self):
+        """return the center cooridinate generated from rect"""
+        if not self._center:
+            moment = cv2.moments(self._cnts)
+            coor_x = int(moment['m10'] / moment['m00']) if moment['m00'] else 0
+            coor_y = int(moment['m01'] / moment['m00']) if moment['m00'] else 0
+            self._center = (coor_x, coor_y)
+        return self._center
+
+    def is_shifting(self, target: DetectionTarget, bound: float):
+        """check the shifting between two DetectionTrget object by L2 dist
+
+        Arguments:
+            target {DetectionTarget} -- target object
+            bound {float} -- tolerable_shifting_dist
+        """
+        l2_dist = np.linalg.norm(self.center, target.center)
+        return l2_dist > bound
