@@ -123,7 +123,7 @@ def main(args: argparse.Namespace):
                               [args.option]*len(pending_frame_idx))
                 mp_interpolate_targets = pool.starmap_async(get_contour_from_video, mp_args)
                 mp_interpolate_targets = mp_interpolate_targets.get()
-                mp_targets += [DetectionTarget(*i) for i in mp_targets if i]
+                mp_targets += [DetectionTarget(*i) for i in mp_interpolate_targets if i]
                 mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
 
             logger.info('#contours after interpolate: %d -> %d', \
