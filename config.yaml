@@ -1,6 +1,30 @@
+general:
+  filter:
+    padding_top: 10
+    padding_bottom: 10
+    padding_right: 10
+    padding_left: 10
+
 cv2:
-  GaussianBlur:
-    ksize: !!python/tuple [5, 5]
+  gaussian_ksize: !!python/tuple [5, 5]
+
+retinex:
+  MSRCR:
+    sigma_list: [15, 80, 250]
+    gain: 5.0
+    bias: 25.0
+    alpha: 125.0
+    beta: 46.0
+    low_clip: 0.01
+    high_clip: 0.99
+
+  auto_MSRCR:
+    sigma_list: [15, 80, 250]
+
+  MSRCP:
+    sigma_list: [15, 80, 250]
+    low_clip: 0.01
+    high_clip: 0.99
 
 video:
   ext:

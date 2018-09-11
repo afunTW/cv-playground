@@ -9,8 +9,11 @@ from pathlib import Path
 
 import yaml
 
-from src.methods import find_contour_by_threshold
-from src.components import Video, Frame, FramePanel
+from src.components import Frame, FramePanel, Video
+from src.methods.retinex import automated_msrcr
+from src.methods.retinex import multi_scale_retinex_color_restoration as MSRCR
+from src.methods.retinex import multi_scale_retinex_chromaticity_preservation as MSRCP
+from src.methods.threshold import find_contour_by_threshold, active_contour_by_threshold
 from src.utils import log_handler
 
 CONFIG_FILE = str(Path(__file__).resolve().parents[0] / 'config.yaml')
@@ -24,7 +27,12 @@ def argparser():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', dest='input', help='could be video or image')
-    parser.add_argument('-o', '--option', dest='option', help='method to handle image')
+    parser.add_argument('-o', '--option', dest='option', \
+                        choices=['threshold', 'active_contour'], \
+                        default='threshold', help='method to handle image')
+    parser.add_argument('-p', '--preprocess', dest='preprocess', \
+                        choices=['MSRCR', 'autoMSRCR', 'MSRCP'], \
+                        help='image preprocessing')
     return parser
 
 def main(args: argparse.Namespace):
@@ -43,14 +51,24 @@ def main(args: argparse.Namespace):
 
     # test single frame from video and the conventional find contour method
     with Video(args.input) as video:
+        frame_img = video.read_frame(0)
+        if args.preprocess == 'MSRCR':
+            frame_img = MSRCR(frame_img, **config['retinex']['MSRCR'])
+        elif args.preprocess == 'autoMSRCR':
+            frame_img = automated_msrcr(frame_img, **config['retinex']['auto_MSRCR'])
+        elif args.preprocess == 'MSRCP':
+            frame_img = MSRCP(frame_img, **config['retinex']['MSRCP'])
         frame = Frame()
-        frame.load(video.read_frame(0))
-        cnts = find_contour_by_threshold(frame.src, **config['cv2'])
+        frame.load(frame_img)
+
+        if args.option == 'threshold':
+            cnts = find_contour_by_threshold(frame.src, **config['cv2'], **config['general']['filter'])
+        elif args.option == 'active_contour':
+            cnts = active_contour_by_threshold(frame.src, **config['general']['filter'])
 
         with FramePanel(frame) as panel:
             panel.draw_contours(cnts)
             panel.show()
-
 
 if __name__ == '__main__':
     main(argparser().parse_args())
