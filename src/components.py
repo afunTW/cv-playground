@@ -182,7 +182,7 @@ class Video(InternalInputObject):
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
             resolution = tuple(map(int, (self.frame_width, self.frame_height)))
             video_writer = cv2.VideoWriter(str(savepath), fourcc, self.fps, resolution)
-            self.detect_targets = sorted(self.detect_targets, lambda x: x.frame_idx)
+            self.detect_targets = sorted(self.detect_targets, key=lambda x: x.frame_idx)
             target_idx = 0
 
             for frame_idx in tqdm(range(self.frame_count)):
@@ -258,7 +258,7 @@ class DetectionTarget():
             self._center = (coor_x, coor_y)
         return self._center
 
-    def is_shifting(self, target: DetectionTarget, bound: float):
+    def is_shifting(self, target, bound: float):
         """check the shifting between two DetectionTrget object by L2 dist
 
         Arguments:

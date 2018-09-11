@@ -64,11 +64,10 @@ def get_contour_from_video(videopath: str, \
             return None
 
         frame_img = _image_preprocess(frame_img, config, preprocess_option)
-        cnts = _image_get_contour(frame_img, config, contour_option) or None
+        cnts = _image_get_contour(frame_img, config, contour_option)
         if cnts is None:
             return None
-        target = DetectionTarget(frame_idx, cnts)
-        return target
+        return (frame_idx, cnts)
 
 def main(args: argparse.Namespace):
     """[summary]
@@ -90,8 +89,8 @@ def main(args: argparse.Namespace):
         # multiprocessing calc the contour
         pending_frame_idx = list(range(0, video.frame_count, config['general']['skip_per_nframe']))
         logger.info('process pending frame index: %d', len(pending_frame_idx))
-        logger.info('cpu count: %d (will used %d)', cpu_count, (cpu_count*3//4))
-        with Pool(processes=(cpu_count*3//4)) as pool:
+        logger.info('cpu count: %d (will used %d)', cpu_count(), (cpu_count()*3//4))
+        with Pool(processes=(cpu_count()*3//4)) as pool:
             # basic contours
             mp_args = zip([args.input]*len(pending_frame_idx), \
                            pending_frame_idx, \
@@ -100,7 +99,7 @@ def main(args: argparse.Namespace):
                            [args.option]*len(pending_frame_idx))
             mp_targets = pool.starmap_async(get_contour_from_video, mp_args)
             mp_targets = mp_targets.get()
-            mp_targets = [i for i in mp_targets if i]
+            mp_targets = [DetectionTarget(*i) for i in mp_targets if i]
             mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
             _basic_target_counts = len(mp_targets)
 
@@ -123,7 +122,7 @@ def main(args: argparse.Namespace):
                               [args.option]*len(pending_frame_idx))
                 mp_interpolate_targets = pool.starmap_async(get_contour_from_video, mp_args)
                 mp_interpolate_targets = mp_interpolate_targets.get()
-                mp_targets += [i for i in mp_interpolate_targets if i]
+                mp_targets += [DetectionTarget(*i) for i in mp_targets if i]
                 mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
 
             logger.info('#contours after interpolate: %d -> %d', \
