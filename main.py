@@ -87,7 +87,7 @@ def main(args: argparse.Namespace):
     with Video(args.input) as video:
 
         # multiprocessing calc the contour
-        pending_frame_idx = list(range(0, video.frame_count, config['skip_per_nframe']))
+        pending_frame_idx = list(range(0, video.frame_count, config['general']['skip_per_nframe']))
         logger.info('process pending frame index: %d', len(pending_frame_idx))
         with Pool() as pool:
             # basic contours
