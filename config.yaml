@@ -1,14 +1,22 @@
+# general operation
 general:
+  skip_per_nframe: 1000 # skip n frames to detect the target
+  tolerable_shifting_dist: 5 # re-calc the contour if greater than this L2 distance
+
+  # focus on rect with given padding to filter contour
   filter:
     padding_top: 10
     padding_bottom: 10
     padding_right: 10
     padding_left: 10
 
+# parameter for cv2 operation
 cv2:
   gaussian_ksize: !!python/tuple [5, 5]
 
+# paramter for retinex operation
 retinex:
+
   MSRCR:
     sigma_list: [15, 80, 250]
     gain: 5.0
@@ -26,6 +34,7 @@ retinex:
     low_clip: 0.01
     high_clip: 0.99
 
+# record the extension for recognizing the input
 video:
   ext:
     - avi
