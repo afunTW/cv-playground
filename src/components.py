@@ -108,7 +108,8 @@ class FramePanel(InternalPanelObject):
         Arguments:
             cnts {np.ndarray} -- contours
         """
-        for cnt_idx, cnt in enumerate(cnts[1:]):
+        for cnt_idx, cnt in enumerate(cnts):
+            if cnt_idx == 0: continue
             pt1, pt2 = tuple(cnts[cnt_idx-1][0]), tuple(cnt[0])
             cv2.line(self.frame.src, pt1, pt2, self.cnt_color, 2, cv2.LINE_AA)
 
