@@ -107,7 +107,8 @@ def main(args: argparse.Namespace):
             while True:
                 # find the new pending index
                 pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
-                check_frame_idx = [i.is_shifting(j) for i, j in pair_targets]
+                check_frame_idx = [i.is_shifting(j, config['general']['tolerable_shifting_dist']) \
+                                   for i, j in pair_targets]
                 if not any(check_frame_idx):
                     break
                 pending_frame_idx = list(compress(pair_targets, check_frame_idx))
