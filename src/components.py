@@ -174,7 +174,7 @@ class Video(InternalInputObject):
             draw_cnts {bool} -- whether to draw contour (default: {False})
         """
 
-        savepath = Path(savepath)
+        savepath = Path('outputs') / savepath
         if not savepath.parent.exists():
             savepath.parent.mkdir(parents=True)
 
