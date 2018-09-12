@@ -12,8 +12,9 @@ Implement the Retinex for image preprocessing which is fork and modified from [d
 - Multi Scale Retinex with Chromaticity Preservation (MSRCP)
 
 | origin | MSRCR | autoMSRCR | MSRCP |
-| --- | --- | --- | --- | --- |
+| --- | --- | --- | --- |
 | ![origin](.img/origin.jpg) | ![MSRCR](.img/MSRCR.jpg) | ![autoMSRCR](.img/autoMSRCR.jpg) | ![MSRCP](.img/MSRCP.jpg) |
+
 
 ## Contour
 
