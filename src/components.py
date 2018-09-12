@@ -199,7 +199,7 @@ class Video(InternalInputObject):
                     pt1, pt2 = tuple(target.cnts[idx-1][0]), tuple(cnt[0])
                     cv2.line(frame, pt1, pt2, (0, 255, 0), 2, cv2.LINE_AA)
                 cv2.putText(frame, 'frame ({}/{})'.format(frame_idx+1, self.frame_count), \
-                            (10, 10), cv2.FONT_HERSHEY_COMPLEX, 1, (255, 255, 255), 2)
+                            (10, 10), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 1)
                 video_writer.write(frame)
             video_writer.release()
         else:
