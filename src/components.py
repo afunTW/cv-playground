@@ -164,14 +164,14 @@ class Video(InternalInputObject):
         else:
             self.cap = cv2.VideoCapture(self.src_path)
 
-    def save(self, savepath: str, draw_cnts: bool = True):
+    def save(self, savepath: str, draw_cnts: bool = False):
         """save the video to given path
 
         Arguments:
             savepath {str} -- save path
 
         Keyword Arguments:
-            draw_cnts {bool} -- whether to draw contour (default: {True})
+            draw_cnts {bool} -- whether to draw contour (default: {False})
         """
 
         savepath = Path(savepath)
