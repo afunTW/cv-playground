@@ -16,7 +16,7 @@ from src.methods.retinex import automated_msrcr
 from src.methods.retinex import multi_scale_retinex_chromaticity_preservation as MSRCP
 from src.methods.retinex import multi_scale_retinex_color_restoration as MSRCR
 from src.methods.threshold import active_contour_by_threshold, find_contour_by_threshold
-from src.utils import log_handler
+from src.utils import log_handler, func_profile
 
 CONFIG_FILE = str(Path(__file__).resolve().parents[0] / 'config.yaml')
 
@@ -69,6 +69,7 @@ def get_contour_from_video(videopath: str, \
             return None
         return (frame_idx, cnts)
 
+@func_profile
 def main(args: argparse.Namespace):
     """[summary]
     an interface to handle input and parse to different method
@@ -104,11 +105,16 @@ def main(args: argparse.Namespace):
             _basic_target_counts = len(mp_targets)
 
             # interpolate contours
+            _check_frame_len = 0
             while True:
                 # find the new pending index
                 pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
                 check_frame_idx = [i.is_shifting(j, config['general']['tolerable_shifting_dist']) \
                                    for i, j in pair_targets]
+                if len(check_frame_idx) == _check_frame_len:
+                    break
+                _check_frame_len = len(check_frame_idx)
+                logger.info('check_frame_idx len=%d (all=%d), any=%s', len(check_frame_idx), video.frame_count, any(check_frame_idx))
                 if not any(check_frame_idx):
                     break
                 pending_frame_idx = list(compress(pair_targets, check_frame_idx))
