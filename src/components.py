@@ -171,9 +171,9 @@ class Video(InternalInputObject):
         for frame_idx in range(self.frame_count):
             target = self.detect_targets[target_idx]
             if target.frame_idx < frame_idx:
-                target_idx = min(target_idx+1, self.frame_count)
+                target_idx = min(target_idx+1, len(self.detect_targets)-1)
                 target = self.detect_targets[target_idx]
-            
+
             if simply:
                 results.append((frame_idx, target.frame_idx, target.center))
             else:
