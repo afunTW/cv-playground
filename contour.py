@@ -5,6 +5,7 @@
 """
 import argparse
 import logging
+import pickle
 from itertools import compress
 from multiprocessing import Pool, cpu_count
 from pathlib import Path
@@ -42,7 +43,7 @@ def argparser():
                         choices=['OTSU', 'MSRCR', 'autoMSRCR', 'MSRCP'], \
                         help='image preprocessing')
     parser.add_argument('-s', '--savepath', dest='savepath', help='video save path')
-    
+
     # subparser - demo mode
     demo_parser = subparser.add_parser('demo')
     demo_parser.add_argument('--frame', dest='frame_idx', default=0, type=int)
@@ -121,7 +122,7 @@ def main(args: argparse.Namespace):
     logger.info(args)
     with open(CONFIG_FILE) as config_file:
         config = yaml.load(config_file)
-    
+
     # demo mode to check if contour is getting right ?
     if args.subparser == 'demo':
         check_contour(args.input, args.frame_idx, config, \
@@ -183,17 +184,24 @@ def main(args: argparse.Namespace):
                         _basic_target_counts, len(mp_targets))
             video.detect_targets += mp_targets
 
-        # save detection object moviing path
+        # save video
         video_savepath = Path('outputs') / args.savepath
         if not video_savepath.parent.exists():
             video_savepath.parent.mkdir(parents=True)
         video.save(str(video_savepath), draw_cnts=True)
 
+        # save path
         detect_target_per_frame = video.extend_target_to_each_frame(simply=True)
         label = ['frame_idx', 'calc_frame_idx', 'center']
         path_savepath = video_savepath.parent / '{}_path.csv'.format(video_savepath.stem)
         df_path = pd.DataFrame(detect_target_per_frame, columns=label)
         df_path.to_csv(str(path_savepath))
+
+        # save contour
+        detect_target_data = {i.frame_idx: i.cnts for i in video.detect_targets}
+        cnts_savepath = video_savepath.parent / '{}_cnts.pkl'.format(video_savepath.stem)
+        with open(cnts_savepath, 'wb') as f:
+            pickle.dump(detect_target_data, f)
 
 if __name__ == '__main__':
     main(argparser().parse_args())
