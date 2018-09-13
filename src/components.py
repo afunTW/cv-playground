@@ -161,7 +161,7 @@ class Video(InternalInputObject):
         """extend the detection target to each frame
 
         Keyword Arguments:
-            simply {bool} -- return frame_idx and center if True, 
+            simply {bool} -- return frame_idx and center if True,
                              or return the DetectionTarget if False (default: {True})
         """
         if not self.detect_targets:
