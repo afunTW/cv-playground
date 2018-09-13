@@ -12,11 +12,14 @@ from pathlib import Path
 import yaml
 
 import pandas as pd
-from src.components import DetectionTarget, Video
+import numpy as np
+from src.components import DetectionTarget, Video, Frame, FramePanel
 from src.methods.retinex import automated_msrcr
 from src.methods.retinex import multi_scale_retinex_chromaticity_preservation as MSRCP
 from src.methods.retinex import multi_scale_retinex_color_restoration as MSRCR
-from src.methods.threshold import active_contour_by_threshold, find_contour_by_threshold
+from src.methods.threshold import active_contour_by_threshold
+from src.methods.threshold import find_contour_by_threshold
+from src.methods.threshold import otsu_mask
 from src.utils import log_handler, func_profile
 
 CONFIG_FILE = str(Path(__file__).resolve().parents[0] / 'config.yaml')
@@ -27,19 +30,34 @@ def argparser():
     Returns:
         [argparse.NameSpace] -- the parameter parse from terminal
     """
-
     parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers(dest='subparser')
+
+    # main parser
     parser.add_argument('-i', '--input', dest='input', help='could be video or image')
     parser.add_argument('-o', '--option', dest='option', \
                         choices=['threshold', 'active_contour'], \
                         default='threshold', help='method to handle image')
     parser.add_argument('-p', '--preprocess', dest='preprocess', \
-                        choices=['MSRCR', 'autoMSRCR', 'MSRCP'], \
+                        choices=['OTSU', 'MSRCR', 'autoMSRCR', 'MSRCP'], \
                         help='image preprocessing')
     parser.add_argument('-s', '--savepath', dest='savepath', help='video save path')
+    
+    # subparser - demo mode
+    demo_parser = subparser.add_parser('demo')
+    demo_parser.add_argument('--frame', dest='frame_idx', default=0, type=int)
+    demo_parser.add_argument('--mask', dest='mask', \
+                             action='store_true', \
+                             help='chekc the mask after image preprocess')
+
+    parser.set_defaults(mask=False)
     return parser
 
 def _image_preprocess(img, config, option):
+    if option == 'OTSU':
+        img = otsu_mask(img, **config['cv2'])
+        img = img[..., np.newaxis]
+        img = np.concatenate((img, img, img), axis=-1)
     if option == 'MSRCR':
         img = MSRCR(img, **config['retinex']['MSRCR'])
     elif option == 'autoMSRCR':
@@ -70,6 +88,25 @@ def get_contour_from_video(videopath: str, \
             return None
         return (frame_idx, cnts)
 
+def check_contour(videopath: str, frame_idx: int, config: dict, \
+                  preoprocess_option: str, contour_option: str, return_mask: bool = False):
+    """demo and check one frame in video if contour set is right"""
+    with Video(videopath) as video:
+        frame_img = video.read_frame(frame_idx)
+        if frame_img is None:
+            print('frame_img is None')
+            return
+        frame_img = _image_preprocess(frame_img, config, preoprocess_option)
+        if return_mask:
+            frame_img = _image_preprocess(frame_img, config, 'OTSU')
+        cnts = _image_get_contour(frame_img, config, contour_option)
+        frame = Frame()
+        frame.load(frame_img)
+        with FramePanel(frame) as panel:
+            if cnts is not None:
+                panel.draw_contours(cnts)
+            panel.show()
+
 @func_profile
 def main(args: argparse.Namespace):
     """[summary]
@@ -84,6 +121,12 @@ def main(args: argparse.Namespace):
     logger.info(args)
     with open(CONFIG_FILE) as config_file:
         config = yaml.load(config_file)
+    
+    # demo mode to check if contour is getting right ?
+    if args.subparser == 'demo':
+        check_contour(args.input, args.frame_idx, config, \
+                      args.preprocess, args.option, args.mask)
+        return
 
     # test single frame from video and the conventional find contour method
     with Video(args.input) as video:
@@ -142,7 +185,7 @@ def main(args: argparse.Namespace):
 
         # save detection object moviing path
         video_savepath = Path('outputs') / args.savepath
-        if not video_savepath.parents.exists():
+        if not video_savepath.parent.exists():
             video_savepath.parent.mkdir(parents=True)
         video.save(str(video_savepath), draw_cnts=True)
 

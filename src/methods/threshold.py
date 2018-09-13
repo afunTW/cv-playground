@@ -93,6 +93,19 @@ def _allin_focus_rect(src_cnts: np.ndarray, rect: tuple):
         return False
     return None
 
+def otsu_mask(img: np.ndarray, \
+              gaussian_ksize: tuple = (5, 5)):
+    """return the otsu mask for debugging
+
+    Arguments:
+        img {np.ndarray} -- process image
+    """
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_blur = cv2.GaussianBlur(img_gray, gaussian_ksize, 0)
+
+    _, threshold = cv2.threshold(img_blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    return threshold
+
 def find_contour_by_threshold(img: np.ndarray, \
                               gaussian_ksize: tuple = (5, 5), \
                               padding_top: int = 0, \
@@ -107,10 +120,7 @@ def find_contour_by_threshold(img: np.ndarray, \
         img {numpy.ndarray} -- input image
         gaussian_ksize {tuple} -- filter kernel for gaussian blur
     """
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    img_blur = cv2.GaussianBlur(img_gray, gaussian_ksize, 0)
-
-    _, threshold = cv2.threshold(img_blur, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    threshold = otsu_mask(img, gaussian_ksize)
     _, cnts, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # filter
