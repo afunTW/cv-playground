@@ -121,12 +121,15 @@ def find_contour_by_threshold(img: np.ndarray, \
         gaussian_ksize {tuple} -- filter kernel for gaussian blur
     """
     threshold = otsu_mask(img, gaussian_ksize)
-    _, cnts, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # filter
     if any([padding_top, padding_right, padding_bottom, padding_left]):
         rect = _get_focus_rect(img.shape, padding_top, padding_right, padding_bottom, padding_left)
-        cnts = [c for c in cnts if _allin_focus_rect(c, rect)]
+        mask = np.zeros_like(threshold)
+        mask[rect[0][1]:rect[1][1], rect[0][0]:rect[1][0], ...] = \
+            threshold[rect[0][1]:rect[1][1], rect[0][0]:rect[1][0], ...]
+        threshold = mask
+    _, cnts, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if cnts:
         return sorted(cnts, key=cv2.contourArea)[-1]
