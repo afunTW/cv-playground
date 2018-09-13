@@ -202,6 +202,7 @@ class Video(InternalInputObject):
             video_writer = cv2.VideoWriter(str(savepath), fourcc, self.fps, resolution)
             self.detect_targets = sorted(self.detect_targets, key=lambda x: x.frame_idx)
             target_idx = 0
+            prev_center = None
 
             for frame_idx in tqdm(range(self.frame_count)):
                 frame = self.read_frame(frame_idx)
@@ -211,13 +212,25 @@ class Video(InternalInputObject):
                 if target.frame_idx < frame_idx:
                     target_idx = min(target_idx+1, len(self.detect_targets)-1)
                     target = self.detect_targets[target_idx]
+
+                # draw center
+                if prev_center:
+                    cv2.line(frame, prev_center, target.center, (0, 0, 255), 2)
+                    cv2.circle(frame, prev_center, 1, (0, 255, 255), 1)
+                    cv2.circle(frame, target.center, 1, (0, 255, 255), 1)
+                    moving_dist = np.linalg.norm(np.array(target.center) - np.array(prev_center))
+                    cv2.putText(frame, str(moving_dist), target.center, \
+                                cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 1)
+                prev_center = target.center
+
+                # draw contour
                 for idx, cnt in enumerate(target.cnts):
                     if idx == 0:
                         continue
                     pt1, pt2 = tuple(target.cnts[idx-1][0]), tuple(cnt[0])
                     cv2.line(frame, pt1, pt2, (0, 255, 0), 2, cv2.LINE_AA)
                 cv2.putText(frame, 'frame ({}/{})'.format(frame_idx+1, self.frame_count), \
-                            (10, 10), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 1)
+                            (20, 20), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 1)
                 video_writer.write(frame)
             video_writer.release()
         else:
