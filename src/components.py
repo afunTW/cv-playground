@@ -157,6 +157,29 @@ class Video(InternalInputObject):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.cap.release()
 
+    def extend_target_to_each_frame(self, simply: bool = True):
+        """extend the detection target to each frame
+
+        Keyword Arguments:
+            simply {bool} -- return frame_idx and center if True, 
+                             or return the DetectionTarget if False (default: {True})
+        """
+        if not self.detect_targets:
+            return None
+        target_idx = 0
+        results = []
+        for frame_idx in range(self.frame_count):
+            target = self.detect_targets[target_idx]
+            if target.frame_idx < frame_idx:
+                target_idx = min(target_idx+1, self.frame_count)
+                target = self.detect_targets[target_idx]
+            
+            if simply:
+                results.append((frame_idx, target.frame_idx, target.center))
+            else:
+                results.append(target)
+        return results
+
     def load(self, src: cv2.VideoCapture = None):
         """load the video from src_path"""
         if src is not None:
@@ -173,11 +196,6 @@ class Video(InternalInputObject):
         Keyword Arguments:
             draw_cnts {bool} -- whether to draw contour (default: {False})
         """
-
-        savepath = Path('outputs') / savepath
-        if not savepath.parent.exists():
-            savepath.parent.mkdir(parents=True)
-
         if draw_cnts and self.detect_targets:
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
             resolution = tuple(map(int, (self.frame_width, self.frame_height)))
@@ -258,12 +276,13 @@ class DetectionTarget():
             self._center = (coor_x, coor_y)
         return self._center
 
-    def is_shifting(self, target, bound: float):
+    def is_shifting(self, target, lower_bound: float, upper_bound: float):
         """check the shifting between two DetectionTrget object by L2 dist
 
         Arguments:
             target {DetectionTarget} -- target object
-            bound {float} -- tolerable_shifting_dist
+            lower bound {float} -- tolerable_shifting_dist
+            upper bound {float} -- ignored_shfting_dist
         """
         l2_dist = np.linalg.norm(np.array(self.center) - np.array(target.center))
-        return l2_dist > bound
+        return lower_bound < l2_dist < upper_bound

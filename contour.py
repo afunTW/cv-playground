@@ -11,6 +11,7 @@ from pathlib import Path
 
 import yaml
 
+import pandas as pd
 from src.components import DetectionTarget, Video
 from src.methods.retinex import automated_msrcr
 from src.methods.retinex import multi_scale_retinex_chromaticity_preservation as MSRCP
@@ -109,12 +110,15 @@ def main(args: argparse.Namespace):
             while True:
                 # find the new pending index
                 pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
-                check_frame_idx = [i.is_shifting(j, config['general']['tolerable_shifting_dist']) \
+                lower_bound = config['general']['tolerable_shifting_dist']
+                upper_bound = config['general']['ignored_shifting_dist']
+                check_frame_idx = [i.is_shifting(j, lower_bound, upper_bound) \
                                    for i, j in pair_targets]
                 if len(check_frame_idx) == _check_frame_len:
                     break
                 _check_frame_len = len(check_frame_idx)
-                logger.info('check_frame_idx len=%d (all=%d), any=%s', len(check_frame_idx), video.frame_count, any(check_frame_idx))
+                logger.info('check_frame_idx len=%d (all=%d), any=%s', \
+                            len(check_frame_idx), video.frame_count, any(check_frame_idx))
                 if not any(check_frame_idx):
                     break
                 pending_frame_idx = list(compress(pair_targets, check_frame_idx))
@@ -135,7 +139,18 @@ def main(args: argparse.Namespace):
             logger.info('#contours after interpolate: %d -> %d', \
                         _basic_target_counts, len(mp_targets))
             video.detect_targets += mp_targets
-        video.save(args.savepath, draw_cnts=True)
+
+        # save detection object moviing path
+        video_savepath = Path('outputs') / args.savepath
+        if not video_savepath.parents.exists():
+            video_savepath.parent.mkdir(parents=True)
+        video.save(str(video_savepath), draw_cnts=True)
+
+        detect_target_per_frame = video.extend_target_to_each_frame(simply=True)
+        label = ['frame_idx', 'calc_frame_idx', 'center']
+        path_savepath = video_savepath.parent / '{}_path.csv'.format(video_savepath.stem)
+        df_path = pd.DataFrame(detect_target_per_frame, columns=label)
+        df_path.to_csv(str(path_savepath))
 
 if __name__ == '__main__':
     main(argparser().parse_args())

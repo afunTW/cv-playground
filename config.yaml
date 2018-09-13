@@ -1,7 +1,11 @@
 # general operation
 general:
-  skip_per_nframe: 1000 # skip n frames to detect the target
-  tolerable_shifting_dist: 5 # re-calc the contour if greater than this L2 distance
+  # skip n frames to detect the target
+  skip_per_nframe: 1000
+  # re-calc the contour if greater than this L2 distance
+  tolerable_shifting_dist: 5
+  # if the shifting dist over this value, regard it as a different object
+  ignored_shifting_dist: 50
 
   # focus on rect with given padding to filter contour
   filter:

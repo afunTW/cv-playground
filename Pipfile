@@ -9,6 +9,7 @@ numpy = "*"
 pyyaml = "*"
 scikit-image = "*"
 tqdm = "*"
+pandas = "*"
 
 [dev-packages]
 better-exceptions = "*"
