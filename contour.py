@@ -35,14 +35,14 @@ def argparser():
     subparser = parser.add_subparsers(dest='subparser')
 
     # main parser
-    parser.add_argument('-i', '--input', dest='input', help='could be video or image')
+    parser.add_argument('-i', '--input', dest='input', help='video')
+    parser.add_argument('-r', '--recursive', dest='recursive', help='folder')
     parser.add_argument('-o', '--option', dest='option', \
                         choices=['threshold', 'active_contour'], \
                         default='threshold', help='method to handle image')
     parser.add_argument('-p', '--preprocess', dest='preprocess', \
                         choices=['OTSU', 'MSRCR', 'autoMSRCR', 'MSRCP'], \
                         help='image preprocessing')
-    parser.add_argument('-s', '--savepath', dest='savepath', help='video save path')
 
     # subparser - demo mode
     demo_parser = subparser.add_parser('demo')
@@ -129,89 +129,98 @@ def main(args: argparse.Namespace):
                       args.preprocess, args.option, args.mask)
         return
 
+    pending_videos = []
+    if args.input:
+        pending_videos.append(args.input)
+    if args.recursive:
+        pending_videos += list(Path(args.recursive).glob('**/*.avi'))
+    pending_videos = list(map(str, pending_videos))
+    pending_videos = list(set(pending_videos))
+
     # test single frame from video and the conventional find contour method
-    with Video(args.input) as video:
+    for video_path in pending_videos:
+        with Video(video_path) as video:
+            # multiprocessing calc the contour
+            pending_frame_idx = list(range(0, video.frame_count, config['general']['skip_per_nframe']))
+            logger.info('process pending frame index: %d', len(pending_frame_idx))
+            logger.info('cpu count: %d (will used %d)', cpu_count(), (cpu_count()*3//4))
+            with Pool(processes=(cpu_count()*3//4)) as pool:
+                lower_bound = config['general']['tolerable_shifting_dist']
+                upper_bound = config['general']['ignored_shifting_dist']
 
-        # multiprocessing calc the contour
-        pending_frame_idx = list(range(0, video.frame_count, config['general']['skip_per_nframe']))
-        logger.info('process pending frame index: %d', len(pending_frame_idx))
-        logger.info('cpu count: %d (will used %d)', cpu_count(), (cpu_count()*3//4))
-        with Pool(processes=(cpu_count()*3//4)) as pool:
-            lower_bound = config['general']['tolerable_shifting_dist']
-            upper_bound = config['general']['ignored_shifting_dist']
-
-            # basic contours
-            mp_args = zip([args.input]*len(pending_frame_idx), \
-                           pending_frame_idx, \
-                           [config]*len(pending_frame_idx), \
-                           [args.preprocess]*len(pending_frame_idx), \
-                           [args.option]*len(pending_frame_idx))
-            mp_targets = pool.starmap_async(get_contour_from_video, mp_args)
-            mp_targets = mp_targets.get()
-            mp_targets = [DetectionTarget(*i) for i in mp_targets if i]
-            mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
-            _basic_target_counts = len(mp_targets)
-
-            # consider the false contour in the basic step
-            pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
-            check_frame_idx = [i.shifting_dist(j) < upper_bound for i, j in pair_targets]
-            pending_frame_idx = list(compress(pair_targets, check_frame_idx))
-            mp_targets = [i for i, j in pending_frame_idx]
-            logger.info('#contours after cleaning: %d -> %d', \
-                        _basic_target_counts, len(mp_targets))
-
-            # interpolate contours
-            _check_frame_len = 0
-            while True:
-                # find the new pending index
-                pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
-                check_frame_idx = [i.is_shifting(j, lower_bound, upper_bound) \
-                                   for i, j in pair_targets]
-                if len(check_frame_idx) == _check_frame_len:
-                    break
-                _check_frame_len = len(check_frame_idx)
-                logger.info('check_frame_idx len=%d (all=%d), any=%s', \
-                            len(check_frame_idx), video.frame_count, any(check_frame_idx))
-                if not any(check_frame_idx):
-                    break
-                pending_frame_idx = list(compress(pair_targets, check_frame_idx))
-                pending_frame_idx = [(i.frame_idx+j.frame_idx)//2 \
-                                     for i, j in pending_frame_idx if i.frame_idx+1 < j.frame_idx]
-
-                # multiprocessing calc
+                # basic contours
                 mp_args = zip([args.input]*len(pending_frame_idx), \
-                              pending_frame_idx, \
-                              [config]*len(pending_frame_idx), \
-                              [args.preprocess]*len(pending_frame_idx), \
-                              [args.option]*len(pending_frame_idx))
-                mp_interpolate_targets = pool.starmap_async(get_contour_from_video, mp_args)
-                mp_interpolate_targets = mp_interpolate_targets.get()
-                mp_targets += [DetectionTarget(*i) for i in mp_interpolate_targets if i]
+                            pending_frame_idx, \
+                            [config]*len(pending_frame_idx), \
+                            [args.preprocess]*len(pending_frame_idx), \
+                            [args.option]*len(pending_frame_idx))
+                mp_targets = pool.starmap_async(get_contour_from_video, mp_args)
+                mp_targets = mp_targets.get()
+                mp_targets = [DetectionTarget(*i) for i in mp_targets if i]
                 mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
+                _basic_target_counts = len(mp_targets)
 
-            logger.info('#contours after interpolate: %d -> %d', \
-                        _basic_target_counts, len(mp_targets))
+                # consider the false contour in the basic step
+                pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
+                check_frame_idx = [i.shifting_dist(j) < upper_bound for i, j in pair_targets]
+                pending_frame_idx = list(compress(pair_targets, check_frame_idx))
+                mp_targets = [i for i, j in pending_frame_idx]
+                logger.info('#contours after cleaning: %d -> %d', \
+                            _basic_target_counts, len(mp_targets))
 
-            video.detect_targets += mp_targets
+                # interpolate contours
+                _check_frame_len = 0
+                while True:
+                    # find the new pending index
+                    pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
+                    check_frame_idx = [i.is_shifting(j, lower_bound, upper_bound) \
+                                    for i, j in pair_targets]
+                    if len(check_frame_idx) == _check_frame_len:
+                        break
+                    _check_frame_len = len(check_frame_idx)
+                    logger.info('check_frame_idx len=%d (all=%d), any=%s', \
+                                len(check_frame_idx), video.frame_count, any(check_frame_idx))
+                    if not any(check_frame_idx):
+                        break
+                    pending_frame_idx = list(compress(pair_targets, check_frame_idx))
+                    pending_frame_idx = [(i.frame_idx+j.frame_idx)//2 \
+                                        for i, j in pending_frame_idx if i.frame_idx+1 < j.frame_idx]
 
-        # save video
-        video_savepath = Path('outputs') / args.savepath
-        if not video_savepath.parent.exists():
-            video_savepath.parent.mkdir(parents=True)
-        video.save(str(video_savepath), draw_cnts=True)
+                    # multiprocessing calc
+                    mp_args = zip([args.input]*len(pending_frame_idx), \
+                                pending_frame_idx, \
+                                [config]*len(pending_frame_idx), \
+                                [args.preprocess]*len(pending_frame_idx), \
+                                [args.option]*len(pending_frame_idx))
+                    mp_interpolate_targets = pool.starmap_async(get_contour_from_video, mp_args)
+                    mp_interpolate_targets = mp_interpolate_targets.get()
+                    mp_targets += [DetectionTarget(*i) for i in mp_interpolate_targets if i]
+                    mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
 
-        # save path
-        detect_target_per_frame = video.extend_target_to_each_frame(simply=True)
-        label = ['frame_idx', 'calc_frame_idx', 'center']
-        path_savepath = video_savepath.parent / '{}_path.csv'.format(video_savepath.stem)
-        df_path = pd.DataFrame(detect_target_per_frame, columns=label)
-        df_path.to_csv(str(path_savepath))
+                logger.info('#contours after interpolate: %d -> %d', \
+                            _basic_target_counts, len(mp_targets))
 
-        # save contour
-        detect_target_data = {i.frame_idx: i.cnts for i in video.detect_targets}
-        cnts_savepath = video_savepath.parent / '{}_cnts.pkl'.format(video_savepath.stem)
-        with open(cnts_savepath, 'wb') as f:
-            pickle.dump(detect_target_data, f)
+                video.detect_targets += mp_targets
+
+            # save video
+            video_path = Path(video_path)
+            video_savepath = Path('outputs')
+            if not video_savepath.parent.exists():
+                video_savepath.mkdir(parents=True)
+            video.save(str(video_savepath / video_path.name), draw_cnts=True)
+
+            # save path
+            detect_target_per_frame = video.extend_target_to_each_frame(simply=True)
+            label = ['frame_idx', 'calc_frame_idx', 'center']
+            path_savepath = video_savepath / '{}_path.csv'.format(video_path.stem)
+            df_path = pd.DataFrame(detect_target_per_frame, columns=label)
+            df_path.to_csv(str(path_savepath))
+
+            # save contour
+            detect_target_data = {i.frame_idx: i.cnts for i in video.detect_targets}
+            cnts_savepath = video_savepath / '{}_cnts.pkl'.format(video_path.stem)
+            with open(cnts_savepath, 'wb') as f:
+                pickle.dump(detect_target_data, f)
 
 if __name__ == '__main__':
     main(argparser().parse_args())
