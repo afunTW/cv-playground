@@ -3,7 +3,6 @@ Define the component in this project
 """
 import abc
 import logging
-from pathlib import Path
 from subprocess import call
 
 import cv2
@@ -297,5 +296,16 @@ class DetectionTarget():
             lower bound {float} -- tolerable_shifting_dist
             upper bound {float} -- ignored_shfting_dist
         """
-        l2_dist = np.linalg.norm(np.array(self.center) - np.array(target.center))
+        l2_dist = self.shifting_dist(target)
         return lower_bound < l2_dist < upper_bound
+
+    def shifting_dist(self, target):
+        """calc the l2 distance
+
+        Arguments:
+            target {DetectionTarget} -- target object
+
+        Returns:
+            {float} -- l2 distance
+        """
+        return np.linalg.norm(np.array(self.center) - np.array(target.center))

@@ -137,6 +137,9 @@ def main(args: argparse.Namespace):
         logger.info('process pending frame index: %d', len(pending_frame_idx))
         logger.info('cpu count: %d (will used %d)', cpu_count(), (cpu_count()*3//4))
         with Pool(processes=(cpu_count()*3//4)) as pool:
+            lower_bound = config['general']['tolerable_shifting_dist']
+            upper_bound = config['general']['ignored_shifting_dist']
+
             # basic contours
             mp_args = zip([args.input]*len(pending_frame_idx), \
                            pending_frame_idx, \
@@ -149,13 +152,19 @@ def main(args: argparse.Namespace):
             mp_targets = sorted(mp_targets, key=lambda x: x.frame_idx)
             _basic_target_counts = len(mp_targets)
 
+            # consider the false contour in the basic step
+            pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
+            check_frame_idx = [i.shifting_dist(j) < upper_bound for i, j in pair_targets]
+            pending_frame_idx = list(compress(pair_targets, check_frame_idx))
+            mp_targets = [i for i, j in pending_frame_idx]
+            logger.info('#contours after cleaning: %d -> %d', \
+                        _basic_target_counts, len(mp_targets))
+
             # interpolate contours
             _check_frame_len = 0
             while True:
                 # find the new pending index
                 pair_targets = [(mp_targets[i], mp_targets[i+1]) for i in range(len(mp_targets)-1)]
-                lower_bound = config['general']['tolerable_shifting_dist']
-                upper_bound = config['general']['ignored_shifting_dist']
                 check_frame_idx = [i.is_shifting(j, lower_bound, upper_bound) \
                                    for i, j in pair_targets]
                 if len(check_frame_idx) == _check_frame_len:
@@ -182,6 +191,7 @@ def main(args: argparse.Namespace):
 
             logger.info('#contours after interpolate: %d -> %d', \
                         _basic_target_counts, len(mp_targets))
+
             video.detect_targets += mp_targets
 
         # save video

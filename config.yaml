@@ -1,7 +1,7 @@
 # general operation
 general:
   # skip n frames to detect the target
-  skip_per_nframe: 1000
+  skip_per_nframe: 600
   # re-calc the contour if greater than this L2 distance
   tolerable_shifting_dist: 5
   # if the shifting dist over this value, regard it as a different object
