@@ -123,12 +123,6 @@ def main(args: argparse.Namespace):
     with open(CONFIG_FILE) as config_file:
         config = yaml.load(config_file)
 
-    # demo mode to check if contour is getting right ?
-    if args.subparser == 'demo':
-        check_contour(args.input, args.frame_idx, config, \
-                      args.preprocess, args.option, args.mask)
-        return
-
     pending_videos = []
     if args.input:
         pending_videos.append(args.input)
@@ -139,8 +133,13 @@ def main(args: argparse.Namespace):
 
     # test single frame from video and the conventional find contour method
     for video_path in pending_videos:
+        # demo mode to check if contour is getting right ?
+        if args.subparser == 'demo':
+            check_contour(video_path, args.frame_idx, config, \
+                          args.preprocess, args.option, args.mask)
+            continue
+        # multiprocessing calc the contour
         with Video(video_path) as video:
-            # multiprocessing calc the contour
             pending_frame_idx = list(range(0, video.frame_count, config['general']['skip_per_nframe']))
             logger.info('process pending frame index: %d', len(pending_frame_idx))
             logger.info('cpu count: %d (will used %d)', cpu_count(), (cpu_count()*3//4))
@@ -149,7 +148,7 @@ def main(args: argparse.Namespace):
                 upper_bound = config['general']['ignored_shifting_dist']
 
                 # basic contours
-                mp_args = zip([args.input]*len(pending_frame_idx), \
+                mp_args = zip([video_path]*len(pending_frame_idx), \
                             pending_frame_idx, \
                             [config]*len(pending_frame_idx), \
                             [args.preprocess]*len(pending_frame_idx), \
@@ -187,7 +186,7 @@ def main(args: argparse.Namespace):
                                         for i, j in pending_frame_idx if i.frame_idx+1 < j.frame_idx]
 
                     # multiprocessing calc
-                    mp_args = zip([args.input]*len(pending_frame_idx), \
+                    mp_args = zip([video_path]*len(pending_frame_idx), \
                                 pending_frame_idx, \
                                 [config]*len(pending_frame_idx), \
                                 [args.preprocess]*len(pending_frame_idx), \
